@@ -64,7 +64,7 @@ else:
     ellipseKenel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (45, 45))
     th5 = cv2.morphologyEx(edged, cv2.MORPH_OPEN, ellipseKenel)
     imagem = cv2.bitwise_not(th5)
-    cv2.imshow("detect.jpg", imagem)
+    # cv2.imshow("detect.jpg", imagem)
 
     im2, contours, hierarchy = cv2.findContours(imagem, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     contours = sorted(contours, key=cv2.contourArea, reverse=True)
