@@ -3,30 +3,10 @@ from numpy import linalg as LA
 import cv2
 import math
 import rect
+import colorExtraction
 from cv2 import *
-import scipy.misc
-from PIL import Image
 
 # initialize the camera
-
-# cam = cv2.VideoCapture(0)  # 0 -> index of camera
-# while(True):
-#     # Capture frame-by-frame
-#     s, img = cam.read()
-#     cv2.imshow('frame', img)
-#     if cv2.waitKey(1) & 0xFF == ord(' '):
-#         imwrite("filename.jpg", img)
-#         break
-# # s, img = cam.read()
-# # if s:  # frame captured without any errorss
-# #     namedWindow("cam-test", True)
-# #     imshow("cam-test", img)
-# #     waitKey(0)
-# #     destroyWindow("cam-test")
-# #     imwrite("filename.jpg", img)  # save image
-#
-# cam.release()
-# cv2.destroyAllWindows()
 
 while True:
     try:
@@ -36,8 +16,6 @@ while True:
         print("Not a number")
 
 image = cv2.imread('img/' + str(num) + '.jpg')
-# image = cv2.imread('filename.jpg')
-# print(image.shape)
 image = cv2.resize(image, (800, 469))
 orig = image.copy()
 cv2.imshow("orig.jpg", orig)
@@ -47,17 +25,14 @@ cv2.destroyAllWindows()
 # convert to grayscale and blur to smooth
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 blurred = cv2.GaussianBlur(gray, (7, 7), 0)
-# blurred = cv2.medianBlur(gray, 5)
 
 # apply Canny Edge Detection
 edged = cv2.Canny(blurred, 0, 50)
-orig_edged = edged.copy()
 edged = cv2.dilate(edged, None, iterations=1)
-# cv2.imshow("edge.jpg", edged)
 
 # find the contours in the edged image, keeping only the
 # largest ones, and initialize the screen contour
-im2, contours, hierarchy = cv2.findContours(edged, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+_, contours, hierarchy = cv2.findContours(edged, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
 contours = sorted(contours, key=cv2.contourArea, reverse=True)
 
 # get approximate contour
@@ -66,12 +41,17 @@ for c in contours:
     p = cv2.arcLength(c, True)
     approx = cv2.approxPolyDP(c, 0.02 * p, True)
     # areaContour2 = cv2.contourArea(c)
-    if len(approx) == 4:
+    if len(approx) == 4 and cv2.contourArea(c)/(800 * 469) > 0.1:
         # print(str(areaContour2))
         target = approx
+        print(cv2.contourArea(c))
+        print(800*469)
+        print(cv2.contourArea(c)/(800 * 469))
         break
 
-# mapping target points to 800x800 quadrilateral
+# mapping target point
+# ts to 800x800 quadrilateral3
+
 # scale A4 is 0.709402 (567.5214x800)
 if target is None:
     print("Marker can not be detected")
@@ -94,39 +74,18 @@ else:
 
     tophatKenel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 40))
     tophat = cv2.morphologyEx(dst, cv2.MORPH_TOPHAT, tophatKenel)
-    # print(np.std(tophat))
-    # print(np.min(tophat))
-    # print(np.max(tophat))
-    # print(np.mean(tophat))
+
+    # using thresholding on warped image to get scanned effect
     minThd = math.floor(8 + np.std(tophat))
-    ret2, that = cv2.threshold(tophat, minThd, 255, cv2.THRESH_BINARY_INV)
-    cv2.imshow("tophat.jpg", tophat)
-    cv2.imshow("that.jpg", that)
-    # dsthsv = cv2.cvtColor(realDst, cv2.COLOR_BGR2HSV)
-    # clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))
-    # cl1 = clahe.apply(dst)
+    _, th_tophat = cv2.threshold(tophat, minThd, 255, cv2.THRESH_BINARY_INV)
+    _, thOtsu = cv2.threshold(dst, 0, 255, cv2.THRESH_OTSU)
 
-    orig_edged = edged.copy()
-    # cv2.imshow("dsthsv.jpg", dsthsv)
-
-    # using thresholding on warped image to get scanned effect (If Required)
-    ret2, th4 = cv2.threshold(dst, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    cv2.imshow("Outline.jpg", image)
-    cv2.imshow("Otsu's.jpg", th4)
-    # cv2.imshow("dst.jpg", dst)
-
-    edged = th4.copy()
     ellipseKenel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    detect = cv2.bitwise_not(that) + cv2.bitwise_not(edged)
-    imagem = cv2.morphologyEx(detect, cv2.MORPH_OPEN, ellipseKenel)
-    # th5 = cv2.morphologyEx(edged, cv2.MORPH_OPEN, ellipseKenel)
-    # imagem = cv2.bitwise_not(th5)
+    th_final = cv2.bitwise_not(th_tophat) + cv2.bitwise_not(thOtsu)
+    imagem = cv2.morphologyEx(th_final, cv2.MORPH_OPEN, ellipseKenel)
     imagem = cv2.erode(imagem, None, iterations=1)
-    cv2.imshow("detect.jpg", imagem)
 
     _, contours, hierarchy = cv2.findContours(imagem, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-    # contours = sorted(contours, key=cv2.contourArea, reverse=True)
     check_detect = 0
     idcontour = 0
     for c in contours:
@@ -138,25 +97,29 @@ else:
                 x != 0 and y != 0 and (x + w - 1) != 567 and (y + h - 1) != 799) and aspectAre > 0.005 \
                 and hierarchy[0][idcontour][3] == -1:
             roi = realDst[y:y + h, x:x + w]
-            b, g, r, _ = np.uint8(cv2.mean(roi))
-            # cv2.imshow("roi.jpg", roi)
-            # print(aspectAre)
-            # print(hierarchy[0][idcontour])
+            color_set = colorExtraction.clustering(roi)
             rect = cv2.minAreaRect(c)
             box = cv2.boxPoints(rect)
             box = np.int0(box)
-            cv2.drawContours(realDst, [box], 0, (255, 0, 255), 2)
             w = LA.norm(box[0] - box[1])
             h = LA.norm(box[0] - box[3])
-            realW = w * (8.3 / 568)
-            realH = h * (11.7 / 800)
-            cv2.rectangle(realDst, (box[2][0], box[2][1] - 55), (box[2][0] + 40, box[2][1] - 18),
-                          (int(b), int(g), int(r)), -1)
-            cv2.rectangle(realDst, (box[2][0] - 2, box[2][1] - 57), (box[2][0] + 42, box[2][1] - 17), (0, 0, 0), 2)
+            realW = w * (21.0 / 568)
+            realH = h * (29.7 / 800)
+
+            # Color Extaction
+            for k in range(0, len(color_set)):
+                colorTmp = roi.copy()
+                b, g, r = color_set[k]
+
+                cv2.rectangle(realDst,  (box[2][0] + (30*k)-50, box[2][1] - 55),\
+                              (box[2][0] + 30 + (30*k)-50, box[2][1] - 18), \
+                              (int(round(b)), int(round(g)), int(round(r))), -1)
+
+            cv2.drawContours(realDst, [box], 0, (255, 0, 255), 2)
             cv2.putText(realDst, \
                         str("{0:.2f}".format(round(realW, 2))) + " x " + str(
-                            "{0:.2f}".format(round(realH, 2))) + " inches", \
-                        (box[2][0], box[2][1]), cv2.FONT_HERSHEY_PLAIN, 1, (255, 0, 255), 2)
+                            "{0:.2f}".format(round(realH, 2))) + " cm", \
+                        (box[2][0], box[2][1]-5), cv2.FONT_HERSHEY_PLAIN, 1, (255, 0, 255), 2)
             check_detect = 1
         idcontour = idcontour + 1
 
@@ -166,13 +129,6 @@ else:
 
     cv2.imshow("output.jpg", realDst)
 
-    M_new = cv2.getPerspectiveTransform(pts2, approx)
-    dst2 = cv2.warpPerspective(realDst, M_new, (800, 469))
-    # cv2.imshow("test.jpg", dst2)
-    scipy.misc.imsave('outfile.jpg', realDst)
-
-    I = cv2.cvtColor(realDst, cv2.COLOR_BGR2RGB)
-    im = Image.fromarray(I)
-    im.save("your_file.png")
+    cv2.imwrite("pic_result.jpg", realDst)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
