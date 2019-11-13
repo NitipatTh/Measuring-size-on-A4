@@ -7,7 +7,7 @@ This method implement for Object detection and measuring on multi perspective us
 ## Dependencies
 Python3, numpy, opencv 3.
 
-** Algorithms: **
+**Algorithms:**
   1. Convert to grayscale and blur to smooth.
   2. Find the contours in the edged image, keeping only the largest ones, and initialize the screen contour.
   3. Get approximate contour of marker.
